@@ -1,7 +1,12 @@
 # Ignore traj and log files
 **/*.dcd
+**/*.nc
+**/*.xtc
 **/*.log
 **/*.tex
+
+# Ignore PDB files
+**/*.pdb
 
 # Local files
 transfer_files.py
