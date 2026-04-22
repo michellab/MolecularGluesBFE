@@ -1,0 +1,8 @@
+Input file for running GB
+&general
+    startframe=1, endframe=100, interval=1,
+    strip_mask= :WAT,CL,NA
+/
+&gb
+igb=5, saltcon=0.15, 
+/
