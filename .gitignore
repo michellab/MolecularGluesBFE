@@ -1,0 +1,11 @@
+# Ignore traj and log files
+**/*.dcd
+**/*.log
+**/*.tex
+
+# Local files
+transfer_files.py
+poster_figs.ipynb
+paper_figs.ipynb
+move_scripts.py
+**/add_indices.py
