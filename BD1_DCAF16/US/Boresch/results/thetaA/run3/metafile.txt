@@ -1,0 +1,8 @@
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.1.txt 1.1 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.2.txt 1.2 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.3.txt 1.3 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.4.txt 1.4 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.5.txt 1.5 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.6.txt 1.6 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.7.txt 1.7 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/thetaA/run3//1.8.txt 1.8 500

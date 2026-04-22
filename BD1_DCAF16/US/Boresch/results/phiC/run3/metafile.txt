@@ -1,0 +1,8 @@
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.6.txt -0.6 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.5.txt -0.5 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.4.txt -0.4 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.3.txt -0.3 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.2.txt -0.2 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//-0.1.txt -0.1 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//0.0.txt 0.0 500
+/home/btan/Documents/MG_US/BD1_DCAF16/US/Boresch/results/phiC/run3//0.1.txt 0.1 500
