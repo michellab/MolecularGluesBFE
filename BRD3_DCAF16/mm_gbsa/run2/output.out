@@ -1,0 +1,28 @@
+nohup: ignoring input
+Loading and checking parameter files for compatibility...
+cpptraj found! Using /home/btan/miniconda3/envs/openbiosim/bin/cpptraj
+mmpbsa_py_energy found! Using /home/btan/miniconda3/envs/openbiosim/bin/mmpbsa_py_energy
+Preparing trajectories for simulation...
+100 frames were processed by cpptraj for use in calculation.
+
+Running calculations on normal system...
+
+Beginning GB calculations with /home/btan/miniconda3/envs/openbiosim/bin/mmpbsa_py_energy
+  calculating complex contribution...
+  calculating receptor contribution...
+  calculating ligand contribution...
+
+Timing:
+Total setup time:                           0.008 min.
+Creating trajectories with cpptraj:         0.284 min.
+Total calculation time:                     3.763 min.
+
+Total GB calculation time:                  3.763 min.
+
+Statistics calculation & output writing:    0.000 min.
+Total time taken:                           4.056 min.
+
+
+MMPBSA.py Finished! Thank you for using. Please cite us if you publish this work with this paper:
+   Miller III, B. R., McGee Jr., T. D., Swails, J. M. Homeyer, N. Gohlke, H. and Roitberg, A. E.
+   J. Chem. Theory Comput., 2012, 8 (9) pp 3314--3321
