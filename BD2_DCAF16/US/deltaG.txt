@@ -1,0 +1,1 @@
+BD2_DCAF16 ΔG_bind = -8.72542 ± 0.72958 kcal/mol
