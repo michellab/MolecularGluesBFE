@@ -1,3 +1,0 @@
-/home/btan/Documents/BRD3E318G_IBG1_DCAF16/US_NPT/RMSD/results/CA_RMSD/BD2_IBG1withBD1_bulk/run4/RED/2.8.txt 0.28 500
-/home/btan/Documents/BRD3E318G_IBG1_DCAF16/US_NPT/RMSD/results/CA_RMSD/BD2_IBG1withBD1_bulk/run4/RED/3.0.txt 0.3 500
-/home/btan/Documents/BRD3E318G_IBG1_DCAF16/US_NPT/RMSD/results/CA_RMSD/BD2_IBG1withBD1_bulk/run4/RED/3.6.txt 0.36 500
