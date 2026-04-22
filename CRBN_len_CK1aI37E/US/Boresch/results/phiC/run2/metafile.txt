@@ -1,0 +1,8 @@
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-3.1.txt -3.1 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-3.0.txt -3.0 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.9.txt -2.9 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.8.txt -2.8 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.7.txt -2.7 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.6.txt -2.6 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.5.txt -2.5 500
+/home/btan/Documents/MG_US/CRBN_len_CK1aI37E/US/Boresch/results/phiC/run2//-2.4.txt -2.4 500

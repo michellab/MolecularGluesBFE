@@ -1,0 +1,1 @@
+CRBN_len_CK1aI37E ΔG_bind = -9.4131 ± 1.01656 kcal/mol
