@@ -4,6 +4,7 @@
 **/*.xtc
 **/*.log
 **/*.tex
+**/*.pyc
 
 # Ignore PDB files
 **/*.pdb
