@@ -7,8 +7,8 @@ def set_rcparams():
     mpl.rcParams.update({
         # --- Figure layout ---
         "figure.figsize": (3.25, 2.5),   # Single-column ACS width
-        "figure.dpi": 1000,
-        "savefig.dpi": 1000,
+        "figure.dpi": 200,
+        "savefig.dpi": 200,
         "savefig.bbox": "tight",
         "savefig.transparent": False,
 
