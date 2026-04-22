@@ -1,0 +1,1 @@
+BRD4_IBG3_DCAF16 ΔG_bind = -15.39399 ± 0.47243 kcal/mol
