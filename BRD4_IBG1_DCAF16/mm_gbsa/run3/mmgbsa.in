@@ -1,0 +1,8 @@
+Input file for running PB
+&general
+    startframe=1, endframe=100, interval=1,
+    strip_mask= :WAT,CL,NA,392-1218
+/
+&gb
+igb=5, saltcon=0.15, 
+/
