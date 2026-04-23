@@ -1,8 +1,8 @@
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.2.txt 2.2 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.3.txt 2.3 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.4.txt 2.4 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.5.txt 2.5 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.6.txt 2.6 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.7.txt 2.7 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.8.txt 2.8 None
-/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.9.txt 2.9 None
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.2.txt 2.2 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.3.txt 2.3 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.4.txt 2.4 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.5.txt 2.5 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.6.txt 2.6 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.7.txt 2.7 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.8.txt 2.8 500
+/home/btan/Documents/MG_US/CRBN_len_CK1a/US/Boresch/results/thetaA/run1//2.9.txt 2.9 500
