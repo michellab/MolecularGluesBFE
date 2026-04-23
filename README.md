@@ -13,6 +13,8 @@ The dependencies for running all python scripts are as follows:
 
 It is also necessary to install the [WHAM implementation](http://membrane.urmc.rochester.edu/?page_id=126) of Grossfield Labs, and add the ```wham``` executable to your PATH.
 
+Note that this repository is quite large and may require a few minutes to clone.
+
 The following files are included for each system: 
 
 #### Unrestrained_MD
