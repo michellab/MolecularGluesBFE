@@ -9,7 +9,7 @@ Boresch equilibrium values:
   phi_C_0: -2.72
   theta_A_0: 1.08
   theta_B_0: 1.75
-Ligand interface residues:
+Ligand interface residues: # 1-indexing
 - 186
 - 187
 - 188
@@ -62,7 +62,7 @@ Ligand interface residues:
 - 371
 - 372
 - 374
-Ligand residues:
+Ligand residues: # 0-indexing
 - 173
 - 174
 - 175
@@ -281,7 +281,7 @@ Ligand residues:
 - 388
 - 389
 - 390
-Receptor interface residues:
+Receptor interface residues: # 1-indexing
 - 1
 - 2
 - 3
@@ -334,7 +334,7 @@ Receptor interface residues:
 - 156
 - 157
 - 160
-Receptor residues:
+Receptor residues: # 0-indexing
 - 0
 - 1
 - 2
