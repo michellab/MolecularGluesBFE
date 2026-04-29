@@ -82,15 +82,34 @@ def plot_Boresch_distribution(system, replicas=[1,2,3]):
 
 def calc_R_squared(x,y):
 
-    # Linear fit
     coeffs = np.polyfit(x, y, 1)
     fit_fn = np.poly1d(coeffs)
     y_fit = fit_fn(x)
 
-    # Calculate R square
     residuals = y - y_fit
     ss_res = np.sum(residuals**2)
     ss_tot = np.sum((y - np.mean(y))**2)
     r_squared = 1 - (ss_res / ss_tot)
 
     return r_squared
+
+def calc_R_sq_uncertainty(x, x_err, y, y_err, n_mc=10000, random_state=None):
+    """
+    Calculate the R squared uncertainty based on n_mc Monte Carlo trials.
+    Return the R squared standard deviation, and the 95 % confidence intervals
+    """
+    rng = np.random.default_rng(random_state)
+
+    x = np.asarray(x)
+    y = np.asarray(y)
+    x_err = np.asarray(x_err)
+    y_err = np.asarray(y_err)
+
+    # Regenerate random distributions
+    x_s = rng.normal(x, x_err, size=(n_mc, x.size))
+    y_s = rng.normal(y, y_err, size=(n_mc, x.size))
+
+    r2 = np.array([calc_R_squared(x_s[i], y_s[i]) for i in range(n_mc)])
+    ci_low, ci_high = np.percentile(r2, [2.5, 97.5])
+
+    return np.std(r2, ddof=1), ci_low, ci_high
