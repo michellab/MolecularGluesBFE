@@ -153,6 +153,98 @@ def apply_RED(system, free_energy_step, dof=None, run_number=1, plot=False):
         except Exception as e:
             print(f"Error processing {CV_value}: {e}")
 
+def write_equilibration_times(system, free_energy_step, dof=None, run_number=1):
+    """
+    Write the RED equilibration time for every umbrella window to CSV.
+
+    The equilibration time is inferred from the number of samples removed
+    from the untruncated CV file before the corresponding file was written to
+    the RED directory. Samples are collected every 0.5 ps.
+
+    Parameters
+    ----------
+    system : str
+        Name of the system.
+    free_energy_step : str
+        'separation' or 'RMSD'.
+    dof : str, optional
+        RMSD degree of freedom. Not required for separation.
+    run_number : int, default=1
+        Repeat number.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Data written to 'equil_times.csv' in the RED directory.
+    """
+
+    full_dir = obtain_dirpath(
+        system, free_energy_step, dof, equilibration=None,
+        run_number=run_number
+    )
+    red_dir = obtain_dirpath(
+        system, free_energy_step, dof, equilibration='RED',
+        run_number=run_number
+    )
+
+    if not os.path.isdir(full_dir):
+        raise FileNotFoundError(f"Untruncated result directory not found: {full_dir}")
+    if not os.path.isdir(red_dir):
+        raise FileNotFoundError(f"RED result directory not found: {red_dir}")
+
+    cv_files = []
+    for filename in os.listdir(full_dir):
+        if not filename.endswith('.txt'):
+            continue
+
+        stem = filename[:-4]
+        try:
+            cv_value = float(stem)
+        except ValueError:
+            continue
+
+        cv_files.append((cv_value, filename))
+
+    if not cv_files:
+        raise RuntimeError(f"No numeric CV files found in: {full_dir}")
+
+    equilibration_times = []
+    sample_interval_ns = 0.5e-3
+
+    for cv_value, filename in sorted(cv_files):
+        full_path = os.path.join(full_dir, filename)
+        red_path = os.path.join(red_dir, filename)
+
+        if not os.path.isfile(red_path):
+            raise FileNotFoundError(
+                f"Missing RED CV file for CV {cv_value}: {red_path}"
+            )
+
+        n_full = len(np.atleast_2d(np.loadtxt(full_path)))
+        n_red = len(np.atleast_2d(np.loadtxt(red_path)))
+
+        if n_red > n_full:
+            raise ValueError(
+                f"RED file contains more samples than the full file for CV "
+                f"{cv_value}: {n_red} > {n_full}"
+            )
+
+        equilibration_times.append({
+            'CV': cv_value,
+            'equilibration_time_ns': (n_full - n_red) * sample_interval_ns
+        })
+
+    equilibration_df = pd.DataFrame(
+        equilibration_times,
+        columns=['CV', 'equilibration_time_ns']
+    )
+    equilibration_df.to_csv(
+        os.path.join(red_dir, 'equil_times.csv'),
+        index=False
+    )
+
+    return equilibration_df
+
 def plot_timeseries(CV_value, system, free_energy_step, dof=None, equilibration=0, run_number=1):
     """
     Plot the timeseries for a specific set of CV values
