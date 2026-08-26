@@ -6,11 +6,17 @@ import logging
 import shutil
 from pathlib import Path
 
-from .convergence_analysis import generate_dg_convergence
+import yaml
+
+from .convergence_analysis import (
+    generate_boresch_dg_convergence,
+    generate_dg_convergence,
+)
 
 
 RMSD_TIMES_NS = [10, 12, 14, 16, 18, 20]
 SEPARATION_TIMES_NS = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+BORESCH_TIMES_NS = [1, 2, 3, 4, 5]
 
 
 def rmsd_state(dof):
@@ -23,8 +29,10 @@ def rmsd_state(dof):
     return "bulk"
 
 
-def discover_calculations(root, systems=None, stages=("separation", "RMSD")):
-    """Discover separation and RMSD RED repeat directories."""
+def discover_calculations(
+    root, systems=None, stages=("separation", "RMSD", "Boresch")
+):
+    """Discover separation, RMSD, and Boresch repeat directories."""
     systems = set(systems) if systems else None
     calculations = []
 
@@ -41,6 +49,24 @@ def discover_calculations(root, systems=None, stages=("separation", "RMSD")):
                 "rmsd_unbound": False,
                 "run_number": int(parts[4].replace("run", "")),
                 "red_dir": red_dir,
+            })
+
+    if "Boresch" in stages:
+        for boresch_dir in sorted(root.glob("*/US/Boresch/results/*/run*")):
+            parts = boresch_dir.relative_to(root).parts
+            system = parts[0]
+            if systems is not None and system not in systems:
+                continue
+            if not boresch_dir.is_dir():
+                continue
+            calculations.append({
+                "system": system,
+                "stage": "Boresch",
+                "dof": parts[4],
+                "rmsd_unbound": False,
+                "run_number": int(parts[5].replace("run", "")),
+                "boresch_dir": boresch_dir,
+                "red_dir": boresch_dir,
             })
 
     if "RMSD" in stages:
@@ -78,7 +104,7 @@ def main():
     )
     parser.add_argument(
         "--stage",
-        choices=["separation", "RMSD", "all"],
+        choices=["separation", "RMSD", "Boresch", "all"],
         default="all",
     )
     parser.add_argument("--run", type=int, help="Analyse only this repeat")
@@ -102,7 +128,7 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
-    stages = ("separation", "RMSD") if args.stage == "all" else (args.stage,)
+    stages = ("separation", "RMSD", "Boresch") if args.stage == "all" else (args.stage,)
     calculations = discover_calculations(args.root, args.systems, stages)
     if args.run is not None:
         calculations = [
@@ -116,11 +142,11 @@ def main():
     successes = 0
     failures = 0
     for calculation in calculations:
-        times = (
-            SEPARATION_TIMES_NS
-            if calculation["stage"] == "separation"
-            else RMSD_TIMES_NS
-        )
+        times = {
+            "separation": SEPARATION_TIMES_NS,
+            "RMSD": RMSD_TIMES_NS,
+            "Boresch": BORESCH_TIMES_NS,
+        }[calculation["stage"]]
 
         label = (
             f"{calculation['system']} {calculation['stage']} "
@@ -130,15 +156,36 @@ def main():
         logging.info("Starting %s", label)
 
         try:
-            generate_dg_convergence(
-                calculation["system"],
-                calculation["stage"],
-                times,
-                dof=calculation["dof"],
-                run_number=calculation["run_number"],
-                wham_executable=args.wham,
-                rmsd_unbound=calculation["rmsd_unbound"],
-            )
+            if calculation["stage"] == "Boresch":
+                with open(
+                    args.root / calculation["system"] / "US" / "US_config.yaml"
+                ) as handle:
+                    config = yaml.safe_load(handle)
+                theta_0 = {
+                    "thetaA": config["Boresch equilibrium values"]["theta_A_0"],
+                    "thetaB": config["Boresch equilibrium values"]["theta_B_0"],
+                    "phiA": config["Boresch equilibrium values"]["phi_A_0"],
+                    "phiB": config["Boresch equilibrium values"]["phi_B_0"],
+                    "phiC": config["Boresch equilibrium values"]["phi_C_0"],
+                }[calculation["dof"]]
+                generate_boresch_dg_convergence(
+                    calculation["system"],
+                    calculation["dof"],
+                    times,
+                    run_number=calculation["run_number"],
+                    boresch_theta_0=theta_0,
+                    wham_executable=args.wham,
+                )
+            else:
+                generate_dg_convergence(
+                    calculation["system"],
+                    calculation["stage"],
+                    times,
+                    dof=calculation["dof"],
+                    run_number=calculation["run_number"],
+                    wham_executable=args.wham,
+                    rmsd_unbound=calculation["rmsd_unbound"],
+                )
             successes += 1
             logging.info("Completed %s", label)
         except Exception as exc:

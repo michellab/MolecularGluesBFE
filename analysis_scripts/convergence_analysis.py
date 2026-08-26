@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .us_analysis import (
+    BoreschContribution,
     RMSDContribution,
     SepContribution,
     obtain_dirpath,
@@ -15,15 +16,6 @@ from .us_analysis import (
 
 
 SAMPLES_PER_NS = 2000
-
-
-import subprocess
-
-from .us_analysis import (
-    RMSDContribution,
-    SepContribution,
-    obtain_dirpath,
-)
 
 
 def _numeric_cv_files(directory):
@@ -59,6 +51,7 @@ def run_wham_and_calculate_dg(
     free_energy_step,
     wham_executable="wham",
     rmsd_unbound=False,
+    boresch_theta_0=None,
 ):
     """Run WHAM in a staged directory and calculate its stage ΔG."""
     target_dir = Path(target_dir)
@@ -75,8 +68,15 @@ def run_wham_and_calculate_dg(
         bins = 100
         lower_limit = np.round(np.min(cv_values) * 0.1 + 0.02, 4)
         upper_limit = np.round(np.max(cv_values) * 0.1 + 0.02, 4)
+    elif free_energy_step == "Boresch":
+        k_cv = 100
+        bins = 50
+        lower_limit = np.min(cv_values)
+        upper_limit = np.max(cv_values)
     else:
-        raise ValueError("free_energy_step must be 'separation' or 'RMSD'")
+        raise ValueError(
+            "free_energy_step must be 'separation', 'RMSD', or 'Boresch'"
+        )
 
     metafile = write_convergence_metafile(target_dir, free_energy_step, k_cv)
     pmf_file = target_dir / "pmf.txt"
@@ -102,15 +102,136 @@ def run_wham_and_calculate_dg(
 
     if free_energy_step == "separation":
         delta_g = SepContribution(x, free_energy, upper_limit - 0.1)
-    else:
+    elif free_energy_step == "RMSD":
         delta_g = RMSDContribution(
             x,
             free_energy,
             k_rmsd=500,
             unbound=rmsd_unbound,
         )
+    else:
+        if boresch_theta_0 is None:
+            raise ValueError("boresch_theta_0 is required for Boresch analysis")
+        delta_g = BoreschContribution(
+            x,
+            free_energy,
+            theta_0=boresch_theta_0,
+            k_restraint=100,
+        )
 
     return delta_g, pmf_file
+
+
+def prepare_boresch_sampling_directory(
+    system,
+    dof,
+    sampling_time_ns,
+    run_number=1,
+):
+    """Create a prefix-truncated, pre-equilibrated Boresch directory."""
+    if sampling_time_ns <= 0:
+        raise ValueError("sampling_time_ns must be positive")
+
+    source_dir = Path(
+        obtain_dirpath(
+            system,
+            "Boresch",
+            dof,
+            equilibration=None,
+            run_number=run_number,
+        )
+    )
+    if not source_dir.is_dir():
+        raise FileNotFoundError(f"Boresch directory not found: {source_dir}")
+
+    target_dir = source_dir / str(int(sampling_time_ns))
+    if target_dir.exists():
+        raise FileExistsError(f"Target directory already exists: {target_dir}")
+
+    n_target = int(round(sampling_time_ns * SAMPLES_PER_NS))
+    cv_files = _numeric_cv_files(source_dir)
+    if not cv_files:
+        raise RuntimeError(f"No numeric CV files found in {source_dir}")
+
+    target_dir.mkdir()
+    rows = []
+    try:
+        for cv_value, source_file in cv_files:
+            data = np.atleast_2d(np.loadtxt(source_file))
+            if n_target > len(data):
+                raise ValueError(
+                    f"Insufficient data for CV {cv_value}: requested "
+                    f"{sampling_time_ns} ns, available "
+                    f"{len(data) / SAMPLES_PER_NS:.4f} ns"
+                )
+            output_file = target_dir / source_file.name
+            np.savetxt(output_file, data[:n_target])
+            rows.append({
+                "CV": cv_value,
+                "sampling_time_ns": sampling_time_ns,
+                "n_samples": n_target,
+                "source_file": str(source_file),
+            })
+    except Exception:
+        shutil.rmtree(target_dir)
+        raise
+
+    return target_dir, pd.DataFrame(rows)
+
+
+def generate_boresch_dg_convergence(
+    system,
+    dof,
+    sampling_times_ns=(1, 2, 3, 4, 5),
+    run_number=1,
+    boresch_theta_0=None,
+    wham_executable="wham",
+    keep_temporary=False,
+):
+    """Generate Boresch forward DG estimates for one DOF and repeat."""
+    if boresch_theta_0 is None:
+        raise ValueError("boresch_theta_0 is required")
+
+    results_dir = Path(
+        obtain_dirpath(
+            system,
+            "Boresch",
+            dof,
+            equilibration=None,
+            run_number=run_number,
+        )
+    )
+    results = []
+    for sampling_time_ns in sampling_times_ns:
+        target_dir = None
+        try:
+            target_dir, _ = prepare_boresch_sampling_directory(
+                system,
+                dof,
+                sampling_time_ns,
+                run_number=run_number,
+            )
+            delta_g, _ = run_wham_and_calculate_dg(
+                target_dir,
+                "Boresch",
+                wham_executable=wham_executable,
+                boresch_theta_0=boresch_theta_0,
+            )
+            results.append({
+                "sampling_time_ns": sampling_time_ns,
+                "dg_kcal_mol": delta_g,
+            })
+        finally:
+            if target_dir is not None and not keep_temporary:
+                shutil.rmtree(target_dir)
+
+    output = pd.DataFrame(
+        results,
+        columns=["sampling_time_ns", "dg_kcal_mol"],
+    )
+    output.to_csv(results_dir / "dg_convergence.csv", index=False)
+    return output
+
 
 def generate_dg_convergence(
     system,
