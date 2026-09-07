@@ -153,6 +153,98 @@ def apply_RED(system, free_energy_step, dof=None, run_number=1, plot=False):
         except Exception as e:
             print(f"Error processing {CV_value}: {e}")
 
+def write_equilibration_times(system, free_energy_step, dof=None, run_number=1):
+    """
+    Write the RED equilibration time for every umbrella window to CSV.
+
+    The equilibration time is inferred from the number of samples removed
+    from the untruncated CV file before the corresponding file was written to
+    the RED directory. Samples are collected every 0.5 ps.
+
+    Parameters
+    ----------
+    system : str
+        Name of the system.
+    free_energy_step : str
+        'separation' or 'RMSD'.
+    dof : str, optional
+        RMSD degree of freedom. Not required for separation.
+    run_number : int, default=1
+        Repeat number.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Data written to 'equil_times.csv' in the RED directory.
+    """
+
+    full_dir = obtain_dirpath(
+        system, free_energy_step, dof, equilibration=None,
+        run_number=run_number
+    )
+    red_dir = obtain_dirpath(
+        system, free_energy_step, dof, equilibration='RED',
+        run_number=run_number
+    )
+
+    if not os.path.isdir(full_dir):
+        raise FileNotFoundError(f"Untruncated result directory not found: {full_dir}")
+    if not os.path.isdir(red_dir):
+        raise FileNotFoundError(f"RED result directory not found: {red_dir}")
+
+    cv_files = []
+    for filename in os.listdir(full_dir):
+        if not filename.endswith('.txt'):
+            continue
+
+        stem = filename[:-4]
+        try:
+            cv_value = float(stem)
+        except ValueError:
+            continue
+
+        cv_files.append((cv_value, filename))
+
+    if not cv_files:
+        raise RuntimeError(f"No numeric CV files found in: {full_dir}")
+
+    equilibration_times = []
+    sample_interval_ns = 0.5e-3
+
+    for cv_value, filename in sorted(cv_files):
+        full_path = os.path.join(full_dir, filename)
+        red_path = os.path.join(red_dir, filename)
+
+        if not os.path.isfile(red_path):
+            raise FileNotFoundError(
+                f"Missing RED CV file for CV {cv_value}: {red_path}"
+            )
+
+        n_full = len(np.atleast_2d(np.loadtxt(full_path)))
+        n_red = len(np.atleast_2d(np.loadtxt(red_path)))
+
+        if n_red > n_full:
+            raise ValueError(
+                f"RED file contains more samples than the full file for CV "
+                f"{cv_value}: {n_red} > {n_full}"
+            )
+
+        equilibration_times.append({
+            'CV': cv_value,
+            'equilibration_time_ns': (n_full - n_red) * sample_interval_ns
+        })
+
+    equilibration_df = pd.DataFrame(
+        equilibration_times,
+        columns=['CV', 'equilibration_time_ns']
+    )
+    equilibration_df.to_csv(
+        os.path.join(red_dir, 'equil_times.csv'),
+        index=False
+    )
+
+    return equilibration_df
+
 def plot_timeseries(CV_value, system, free_energy_step, dof=None, equilibration=0, run_number=1):
     """
     Plot the timeseries for a specific set of CV values
@@ -920,8 +1012,150 @@ def calc_total_DeltaG(system, tolerance=0.01, plot_pmfs=False, runs=[1,2,3]):
 
     return total_deltaG, total_err, df
 
+def _get_conv_trace(system, stage, direction="forward"):
+    """
+    Helper to load convergence data for a stage and direction.
 
+    direction must be "forward" or "reverse".
+    """
 
+    if direction not in {"forward", "reverse"}:
+        raise ValueError("direction must be 'forward' or 'reverse'")
 
-        
+    filename = (
+        "dg_convergence.csv"
+        if direction == "forward"
+        else "dg_convergence_reverse.csv"
+    )
 
+    filepath = f"{system}/US/{stage}"
+
+    if stage == "separation":
+        filepath += "/results"
+
+    df = pd.read_csv(f"{filepath}/{filename}")
+
+    sampling_time = df["sampling_time_ns"].to_numpy()
+    dG = df["av_dg_kcal_mol"].to_numpy()
+    r1 = df["dg_repeat1"].to_numpy()
+    r2 = df["dg_repeat2"].to_numpy()
+    r3 = df["dg_repeat3"].to_numpy()
+    err = df["sem_kcal_mol"].to_numpy()
+
+    return sampling_time, dG, r1, r2, r3, err
+
+def plot_convergence(system, stage, check_time, dg_tolerance):
+    """
+    Check that the forwards and reverse estimates lie within
+    dg_tolerance of each other at check_time
+    """
+    forward = _get_conv_trace(
+        system,
+        stage,
+        direction="forward"
+    )
+
+    reverse = _get_conv_trace(
+        system,
+        stage,
+        direction="reverse"
+    )
+
+    sampling_time = forward[0]
+
+    if stage == 'Boresch': # account for uniform 1 ns truncation
+        sampling_time = sampling_time + 1
+
+    fwd = {
+        1: forward[2],
+        2: forward[3],
+        3: forward[4],
+    }
+
+    rev = {
+        1: reverse[2],
+        2: reverse[3],
+        3: reverse[4],
+    }
+
+    cutoff_idx = np.where(
+        np.isclose(sampling_time, check_time)
+    )[0][0]
+
+    colours = {
+        1: "tab:blue",
+        2: "tab:orange",
+        3: "tab:green",
+    }
+
+    for repeat, colour in colours.items():
+        plt.plot(
+            sampling_time,
+            fwd[repeat],
+            marker="s",
+            color=colour,
+            label=f"repeat {repeat} forward",
+        )
+
+        plt.plot(
+            sampling_time,
+            rev[repeat],
+            linestyle=":",
+            marker="o",
+            color=colour,
+            label=f"repeat {repeat} reverse",
+        )
+
+        forward_cutoff = fwd[repeat][cutoff_idx]
+        forward_final = fwd[repeat][-1]
+
+        reverse_cutoff = rev[repeat][cutoff_idx]
+        reverse_final = rev[repeat][-1]
+
+        if np.isfinite(forward_cutoff) and np.isfinite(reverse_cutoff):
+            directional_difference = abs(
+                forward_cutoff - reverse_cutoff
+            )
+
+            if directional_difference > dg_tolerance:
+                print(
+                    f"{system}: repeat {repeat} forward/reverse "
+                    f"disagreement at {check_time:g} ns: "
+                    f"{directional_difference:.2f} kcal/mol"
+                )
+
+                plt.plot(
+                    sampling_time[-1]+1.5,
+                    fwd[repeat][-1],
+                    marker="*",
+                    markersize=16,
+                    color=colour,
+                    markeredgecolor="black",
+                    linestyle="None",
+                    zorder=10,
+                )
+
+    # y-axis limits
+    all_dg = np.concatenate([
+        fwd[1], fwd[2], fwd[3],
+        rev[1], rev[2], rev[3],
+    ])
+
+    all_dg = all_dg[np.isfinite(all_dg)]
+
+    if len(all_dg) == 0:
+        raise ValueError("No finite DG estimates available for plotting")
+
+    y_center = 0.5 * (np.min(all_dg) + np.max(all_dg))
+
+    plt.ylim(
+        y_center - 5.0,
+        y_center + 5.0,
+    )
+
+    plt.title(f"{system} {stage} forward/reverse convergence")
+    plt.xlabel("Window sampling time (ns)")
+    plt.ylabel("Free energy estimate (kcal/mol)")
+    plt.legend(fontsize='x-small')
+    plt.tight_layout()
+    plt.show()
