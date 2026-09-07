@@ -16,6 +16,7 @@ paper_figs.ipynb
 move_scripts.py
 **/add_indices.py
 SepCV_comparison/**
+convergence_analysis.ipynb
 
 # local HD figs
 convergence_plots/**
