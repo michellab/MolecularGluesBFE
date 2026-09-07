@@ -95,10 +95,14 @@ def run_wham_and_calculate_dg(
             stderr=subprocess.STDOUT,
         )
 
-    pmf = np.loadtxt(pmf_file)
-    finite = np.isfinite(pmf[:, 1])
+    pmf = np.atleast_2d(np.loadtxt(pmf_file))
+    if pmf.shape[1] < 2:
+        raise ValueError(f"WHAM PMF has invalid shape: {pmf.shape}")
+    finite = np.isfinite(pmf[:, 0]) & np.isfinite(pmf[:, 1])
     x = pmf[finite, 0]
     free_energy = pmf[finite, 1]
+    if len(x) < 2:
+        raise ValueError("WHAM produced fewer than two finite PMF points")
 
     if free_energy_step == "separation":
         delta_g = SepContribution(x, free_energy, upper_limit - 0.1)
@@ -179,6 +183,183 @@ def prepare_boresch_sampling_directory(
     return target_dir, pd.DataFrame(rows)
 
 
+
+def prepare_reverse_sampling_directory(
+    system,
+    free_energy_step,
+    sampling_time_ns,
+    dof=None,
+    run_number=1,
+):
+    """Create a suffix-truncated directory from RED production samples."""
+    if free_energy_step not in {"separation", "RMSD"}:
+        raise ValueError("Use prepare_boresch_reverse_sampling_directory for Boresch")
+
+    red_dir = Path(obtain_dirpath(system, free_energy_step, dof, "RED", run_number))
+    equilibration_df = pd.read_csv(red_dir / "equil_times.csv")
+    cv_files = {value: path for value, path in _numeric_cv_files(red_dir)}
+    target_dir = red_dir / f"reverse_{int(sampling_time_ns)}"
+    if target_dir.exists():
+        raise FileExistsError(f"Target directory already exists: {target_dir}")
+
+    target_dir.mkdir()
+    rows = []
+    try:
+        for record in equilibration_df.itertuples(index=False):
+            cv_value = float(record.CV)
+            eq_time = float(record.equilibration_time_ns)
+            if cv_value not in cv_files:
+                raise FileNotFoundError(f"No RED CV file found for CV {cv_value}")
+            effective_time = sampling_time_ns - eq_time
+            if effective_time <= 0:
+                raise ValueError(
+                    f"Sampling time {sampling_time_ns} ns is not greater than "
+                    f"equilibration time {eq_time} ns for CV {cv_value}"
+                )
+            n_target = int(round(effective_time * SAMPLES_PER_NS))
+            data = np.atleast_2d(np.loadtxt(cv_files[cv_value]))
+            if n_target > len(data):
+                raise ValueError(
+                    f"Insufficient RED data for CV {cv_value}: requested "
+                    f"{effective_time:.4f} ns, available "
+                    f"{len(data) / SAMPLES_PER_NS:.4f} ns"
+                )
+            np.savetxt(target_dir / cv_files[cv_value].name, data[-n_target:])
+            rows.append({
+                "CV": cv_value,
+                "equilibration_time_ns": eq_time,
+                "sampling_time_ns": sampling_time_ns,
+                "n_samples": n_target,
+                "source_file": str(cv_files[cv_value]),
+            })
+    except Exception:
+        shutil.rmtree(target_dir)
+        raise
+    return target_dir, pd.DataFrame(rows)
+
+
+def prepare_boresch_reverse_sampling_directory(system, dof, sampling_time_ns, run_number=1):
+    """Create a suffix-truncated directory from Boresch samples."""
+    source_dir = Path(obtain_dirpath(system, "Boresch", dof, None, run_number))
+    target_dir = source_dir / f"reverse_{int(sampling_time_ns)}"
+    if target_dir.exists():
+        raise FileExistsError(f"Target directory already exists: {target_dir}")
+
+    n_target = int(round(sampling_time_ns * SAMPLES_PER_NS))
+    cv_files = _numeric_cv_files(source_dir)
+    target_dir.mkdir()
+    rows = []
+    try:
+        for cv_value, source_file in cv_files:
+            data = np.atleast_2d(np.loadtxt(source_file))
+            if n_target > len(data):
+                raise ValueError(
+                    f"Insufficient Boresch data for CV {cv_value}: requested "
+                    f"{sampling_time_ns} ns, available "
+                    f"{len(data) / SAMPLES_PER_NS:.4f} ns"
+                )
+            np.savetxt(target_dir / source_file.name, data[-n_target:])
+            rows.append({
+                "CV": cv_value,
+                "sampling_time_ns": sampling_time_ns,
+                "n_samples": n_target,
+                "source_file": str(source_file),
+            })
+    except Exception:
+        shutil.rmtree(target_dir)
+        raise
+    return target_dir, pd.DataFrame(rows)
+
+
+def generate_reverse_dg_convergence(
+    system,
+    free_energy_step,
+    sampling_times_ns,
+    dof=None,
+    run_number=1,
+    wham_executable="wham",
+    rmsd_unbound=False,
+    max_equilibration_time_ns=10.0,
+):
+    """Generate reverse DG estimates from the final RED samples."""
+    red_dir = Path(obtain_dirpath(system, free_energy_step, dof, "RED", run_number))
+    equilibration_df = pd.read_csv(red_dir / "equil_times.csv")
+    if equilibration_df["equilibration_time_ns"].max() > max_equilibration_time_ns:
+        print(f"Skipping {red_dir}: equilibration time exceeds limit; writing NaNs")
+        output = pd.DataFrame({
+            "sampling_time_ns": list(sampling_times_ns),
+            "dg_kcal_mol": np.nan,
+        })
+        output.to_csv(red_dir / "dg_convergence_reverse.csv", index=False)
+        return output
+
+    results = []
+    for sampling_time_ns in sampling_times_ns:
+        target_dir = None
+        try:
+            target_dir, _ = prepare_reverse_sampling_directory(
+                system, free_energy_step, sampling_time_ns, dof, run_number
+            )
+            delta_g, _ = run_wham_and_calculate_dg(
+                target_dir, free_energy_step, wham_executable=wham_executable,
+                rmsd_unbound=rmsd_unbound,
+            )
+            results.append({"sampling_time_ns": sampling_time_ns, "dg_kcal_mol": delta_g})
+        except Exception as exc:
+            print(
+                f"WHAM failed for {system} {free_energy_step} "
+                f"run{run_number} at {sampling_time_ns} ns: {exc}"
+            )
+            results.append({"sampling_time_ns": sampling_time_ns, "dg_kcal_mol": np.nan})
+        finally:
+            if target_dir is not None:
+                shutil.rmtree(target_dir)
+
+    output = pd.DataFrame(results, columns=["sampling_time_ns", "dg_kcal_mol"])
+    output.to_csv(red_dir / "dg_convergence_reverse.csv", index=False)
+    return output
+
+
+def generate_boresch_reverse_dg_convergence(
+    system,
+    dof,
+    sampling_times_ns=(1, 2, 3, 4, 5),
+    run_number=1,
+    boresch_theta_0=None,
+    wham_executable="wham",
+):
+    """Generate reverse Boresch DG estimates from final samples."""
+    if boresch_theta_0 is None:
+        raise ValueError("boresch_theta_0 is required")
+
+    results_dir = Path(obtain_dirpath(system, "Boresch", dof, None, run_number))
+    results = []
+    for sampling_time_ns in sampling_times_ns:
+        target_dir = None
+        try:
+            target_dir, _ = prepare_boresch_reverse_sampling_directory(
+                system, dof, sampling_time_ns, run_number
+            )
+            delta_g, _ = run_wham_and_calculate_dg(
+                target_dir, "Boresch", wham_executable=wham_executable,
+                boresch_theta_0=boresch_theta_0,
+            )
+            results.append({"sampling_time_ns": sampling_time_ns, "dg_kcal_mol": delta_g})
+        except Exception as exc:
+            print(
+                f"WHAM failed for {system} Boresch {dof} "
+                f"run{run_number} at {sampling_time_ns} ns: {exc}"
+            )
+            results.append({"sampling_time_ns": sampling_time_ns, "dg_kcal_mol": np.nan})
+        finally:
+            if target_dir is not None:
+                shutil.rmtree(target_dir)
+
+    output = pd.DataFrame(results, columns=["sampling_time_ns", "dg_kcal_mol"])
+    output.to_csv(results_dir / "dg_convergence_reverse.csv", index=False)
+    return output
+
+
 def generate_boresch_dg_convergence(
     system,
     dof,
@@ -220,6 +401,15 @@ def generate_boresch_dg_convergence(
             results.append({
                 "sampling_time_ns": sampling_time_ns,
                 "dg_kcal_mol": delta_g,
+            })
+        except Exception as exc:
+            print(
+                f"WHAM failed for {system} Boresch {dof} "
+                f"run{run_number} at {sampling_time_ns} ns: {exc}"
+            )
+            results.append({
+                "sampling_time_ns": sampling_time_ns,
+                "dg_kcal_mol": np.nan,
             })
         finally:
             if target_dir is not None and not keep_temporary:
@@ -263,10 +453,16 @@ def generate_dg_convergence(
     equilibration_df = pd.read_csv(equilibration_file)
 
     if equilibration_df["equilibration_time_ns"].max() > max_equilibration_time_ns:
-        raise ValueError(
-            f"Skipping {red_dir}: equilibration time exceeds "
-            f"{max_equilibration_time_ns} ns"
+        print(
+            f"Skipping {red_dir}: equilibration time exceeds limit; "
+            "writing NaNs"
         )
+        convergence_df = pd.DataFrame({
+            "sampling_time_ns": list(sampling_times_ns),
+            "dg_kcal_mol": np.nan,
+        })
+        convergence_df.to_csv(red_dir / "dg_convergence.csv", index=False)
+        return convergence_df
 
     results = []
     for sampling_time_ns in sampling_times_ns:
@@ -288,6 +484,15 @@ def generate_dg_convergence(
             results.append({
                 "sampling_time_ns": sampling_time_ns,
                 "dg_kcal_mol": delta_g,
+            })
+        except Exception as exc:
+            print(
+                f"WHAM failed for {system} {free_energy_step} "
+                f"run{run_number} at {sampling_time_ns} ns: {exc}"
+            )
+            results.append({
+                "sampling_time_ns": sampling_time_ns,
+                "dg_kcal_mol": np.nan,
             })
         finally:
             if target_dir is not None and not keep_temporary:

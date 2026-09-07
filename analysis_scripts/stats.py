@@ -30,7 +30,7 @@ import numpy as np
 from scipy import stats
 
 DEFAULT_SEED = 42
-DEFAULT_N_BOOTSTRAP = 1000
+DEFAULT_N_BOOTSTRAP = 10000
 
 # Assumed experimental ΔG standard error (kcal/mol) used when no per-ligand
 # experimental error is supplied. Affects only the bootstrap CIs and the null

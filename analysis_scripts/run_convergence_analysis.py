@@ -10,7 +10,9 @@ import yaml
 
 from .convergence_analysis import (
     generate_boresch_dg_convergence,
+    generate_boresch_reverse_dg_convergence,
     generate_dg_convergence,
+    generate_reverse_dg_convergence,
 )
 
 
@@ -109,6 +111,10 @@ def main():
     )
     parser.add_argument("--run", type=int, help="Analyse only this repeat")
     parser.add_argument(
+        "--direction", choices=["forward", "reverse"], default="forward",
+        help="Estimate direction to analyse (default: forward)",
+    )
+    parser.add_argument(
         "--wham",
         default=shutil.which("wham") or "wham",
         help="WHAM executable",
@@ -168,19 +174,24 @@ def main():
                     "phiB": config["Boresch equilibrium values"]["phi_B_0"],
                     "phiC": config["Boresch equilibrium values"]["phi_C_0"],
                 }[calculation["dof"]]
-                generate_boresch_dg_convergence(
-                    calculation["system"],
-                    calculation["dof"],
-                    times,
+                generator = (
+                    generate_boresch_dg_convergence
+                    if args.direction == "forward"
+                    else generate_boresch_reverse_dg_convergence
+                )
+                generator(
+                    calculation["system"], calculation["dof"], times,
                     run_number=calculation["run_number"],
-                    boresch_theta_0=theta_0,
-                    wham_executable=args.wham,
+                    boresch_theta_0=theta_0, wham_executable=args.wham,
                 )
             else:
-                generate_dg_convergence(
-                    calculation["system"],
-                    calculation["stage"],
-                    times,
+                generator = (
+                    generate_dg_convergence
+                    if args.direction == "forward"
+                    else generate_reverse_dg_convergence
+                )
+                generator(
+                    calculation["system"], calculation["stage"], times,
                     dof=calculation["dof"],
                     run_number=calculation["run_number"],
                     wham_executable=args.wham,

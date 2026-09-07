@@ -51,10 +51,16 @@ def _summarize_repeats(data):
     ]
 
 
-def aggregate_repeat_convergence(results_dir, boresch=False):
+def aggregate_repeat_convergence(
+    results_dir, filename="dg_convergence.csv", boresch=False
+):
     """Aggregate repeat-level convergence files in one simulation directory."""
     results_dir = Path(results_dir)
-    pattern = "run*/dg_convergence.csv" if boresch else "run*/RED/dg_convergence.csv"
+    pattern = (
+        f"run*/{filename}"
+        if boresch
+        else f"run*/RED/{filename}"
+    )
     repeat_files = sorted(results_dir.glob(pattern))
     if not repeat_files:
         raise FileNotFoundError(
@@ -73,11 +79,11 @@ def aggregate_repeat_convergence(results_dir, boresch=False):
         frames.append(data)
 
     output = _summarize_repeats(pd.concat(frames, ignore_index=True))
-    output.to_csv(results_dir / "dg_convergence.csv", index=False)
+    output.to_csv(results_dir / filename, index=False)
     return output
 
 
-def aggregate_overall_rmsd(system_dir):
+def aggregate_overall_rmsd(system_dir, filename="dg_convergence.csv"):
     """Aggregate complete-repeat RMSD totals for one molecular-glue system.
 
     RMSD contributions are summed across all RMSD degrees of freedom within
@@ -90,8 +96,11 @@ def aggregate_overall_rmsd(system_dir):
     excluded_dofs = RMSD_TOTAL_EXCLUSIONS.get(system_dir.name, set())
     repeat_files = sorted(
         path
-        for path in rmsd_dir.glob("results/*/run*/RED/dg_convergence.csv")
-        if path.relative_to(rmsd_dir).parts[1] not in excluded_dofs
+        for path in rmsd_dir.glob(f"results/*/run*/RED/{filename}")
+        if (
+            path.name == filename
+            and path.relative_to(rmsd_dir).parts[1] not in excluded_dofs
+        )
     )
     if not repeat_files:
         raise FileNotFoundError(f"No RMSD convergence files found in {rmsd_dir}")
@@ -115,9 +124,13 @@ def aggregate_overall_rmsd(system_dir):
     required_dofs = all_data["dof"].nunique()
 
     complete_keys = (
-        all_data.groupby(["repeat", "sampling_time_ns"])["dof"]
-        .nunique()
-        .loc[lambda values: values == required_dofs]
+        all_data.groupby(["repeat", "sampling_time_ns"])
+        .agg(
+            n_dofs=("dof", "nunique"),
+            n_valid=("dg_kcal_mol", "count"),
+        )
+        .loc[lambda values: (values["n_dofs"] == required_dofs)
+              & (values["n_valid"] == required_dofs)]
         .reset_index()[["repeat", "sampling_time_ns"]]
     )
     complete_data = all_data.merge(
@@ -132,16 +145,18 @@ def aggregate_overall_rmsd(system_dir):
     )
 
     output = _summarize_repeats(repeat_totals.rename(columns={"repeat": "repeat"}))
-    output.to_csv(rmsd_dir / "dg_convergence.csv", index=False)
+    output.to_csv(rmsd_dir / filename, index=False)
     return output
 
 
 
-def aggregate_overall_boresch(system_dir):
+def aggregate_overall_boresch(system_dir, filename="dg_convergence.csv"):
     """Aggregate the five Boresch DOF contributions for one system."""
     system_dir = Path(system_dir)
     boresch_dir = system_dir / "US" / "Boresch"
-    repeat_files = sorted(boresch_dir.glob("results/*/run*/dg_convergence.csv"))
+    repeat_files = sorted(
+        boresch_dir.glob(f"results/*/run*/{filename}")
+    )
     if not repeat_files:
         raise FileNotFoundError(
             f"No Boresch convergence files found in {boresch_dir}"
@@ -165,9 +180,13 @@ def aggregate_overall_boresch(system_dir):
     all_data = pd.concat(frames, ignore_index=True)
     required_dofs = all_data["dof"].nunique()
     complete_keys = (
-        all_data.groupby(["repeat", "sampling_time_ns"])["dof"]
-        .nunique()
-        .loc[lambda values: values == required_dofs]
+        all_data.groupby(["repeat", "sampling_time_ns"])
+        .agg(
+            n_dofs=("dof", "nunique"),
+            n_valid=("dg_kcal_mol", "count"),
+        )
+        .loc[lambda values: (values["n_dofs"] == required_dofs)
+              & (values["n_valid"] == required_dofs)]
         .reset_index()[["repeat", "sampling_time_ns"]]
     )
     complete_data = all_data.merge(
@@ -181,7 +200,7 @@ def aggregate_overall_boresch(system_dir):
         .sum()
     )
     output = _summarize_repeats(repeat_totals)
-    output.to_csv(boresch_dir / "dg_convergence.csv", index=False)
+    output.to_csv(boresch_dir / filename, index=False)
     return output
 
 
@@ -192,8 +211,8 @@ def discover_results_directories(root):
     return sorted(
         path for path in candidates
         if path.is_dir() and (
-            any(path.glob("run*/RED/dg_convergence.csv"))
-            or any(path.glob("run*/dg_convergence.csv"))
+            any(path.glob("run*/RED/dg_convergence*.csv"))
+            or any(path.glob("run*/dg_convergence*.csv"))
         )
     )
 
@@ -223,38 +242,52 @@ def main():
         ]
 
     print(f"Found {len(results_directories)} simulation results directories")
-    for results_dir in results_directories:
-        summary = aggregate_repeat_convergence(results_dir)
-        print(f"Wrote {results_dir / 'dg_convergence.csv'} ({len(summary)} times)")
+    for filename in ("dg_convergence.csv", "dg_convergence_reverse.csv"):
+        for results_dir in results_directories:
+            try:
+                summary = aggregate_repeat_convergence(results_dir, filename=filename)
+            except FileNotFoundError:
+                continue
+            print(f"Wrote {results_dir / filename} ({len(summary)} times)")
 
+    selected_systems = set(args.systems) if args.systems else None
     boresch_directories = sorted(
         path for path in args.root.glob("*/US/Boresch/results/*")
-        if path.is_dir() and any(path.glob("run*/dg_convergence.csv"))
+        if path.is_dir()
+        and (selected_systems is None or path.relative_to(args.root).parts[0] in selected_systems)
+        and any(path.glob("run*/dg_convergence*.csv"))
     )
-    for results_dir in boresch_directories:
-        summary = aggregate_repeat_convergence(results_dir, boresch=True)
-        print(f"Wrote {results_dir / 'dg_convergence.csv'} ({len(summary)} times)")
+    for filename in ("dg_convergence.csv", "dg_convergence_reverse.csv"):
+        for results_dir in boresch_directories:
+            try:
+                summary = aggregate_repeat_convergence(
+                    results_dir, filename=filename, boresch=True
+                )
+            except FileNotFoundError:
+                continue
+            print(f"Wrote {results_dir / filename} ({len(summary)} times)")
 
     systems = sorted({path.relative_to(args.root).parts[0] for path in results_directories})
     for system in systems:
-        try:
-            summary = aggregate_overall_rmsd(args.root / system)
-        except FileNotFoundError:
-            pass
-        else:
-            print(
-                f"Wrote {args.root / system / 'US' / 'RMSD' / 'dg_convergence.csv'} "
-                f"({len(summary)} times)"
-            )
-        try:
-            summary = aggregate_overall_boresch(args.root / system)
-        except FileNotFoundError:
-            pass
-        else:
-            print(
-                f"Wrote {args.root / system / 'US' / 'Boresch' / 'dg_convergence.csv'} "
-                f"({len(summary)} times)"
-            )
+        for filename in ("dg_convergence.csv", "dg_convergence_reverse.csv"):
+            try:
+                summary = aggregate_overall_rmsd(args.root / system, filename=filename)
+            except FileNotFoundError:
+                pass
+            else:
+                print(
+                    f"Wrote {args.root / system / 'US' / 'RMSD' / filename} "
+                    f"({len(summary)} times)"
+                )
+            try:
+                summary = aggregate_overall_boresch(args.root / system, filename=filename)
+            except FileNotFoundError:
+                pass
+            else:
+                print(
+                    f"Wrote {args.root / system / 'US' / 'Boresch' / filename} "
+                    f"({len(summary)} times)"
+                )
 
 
 if __name__ == "__main__":
