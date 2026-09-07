@@ -1012,8 +1012,150 @@ def calc_total_DeltaG(system, tolerance=0.01, plot_pmfs=False, runs=[1,2,3]):
 
     return total_deltaG, total_err, df
 
+def _get_conv_trace(system, stage, direction="forward"):
+    """
+    Helper to load convergence data for a stage and direction.
 
+    direction must be "forward" or "reverse".
+    """
 
+    if direction not in {"forward", "reverse"}:
+        raise ValueError("direction must be 'forward' or 'reverse'")
 
-        
+    filename = (
+        "dg_convergence.csv"
+        if direction == "forward"
+        else "dg_convergence_reverse.csv"
+    )
 
+    filepath = f"{system}/US/{stage}"
+
+    if stage == "separation":
+        filepath += "/results"
+
+    df = pd.read_csv(f"{filepath}/{filename}")
+
+    sampling_time = df["sampling_time_ns"].to_numpy()
+    dG = df["av_dg_kcal_mol"].to_numpy()
+    r1 = df["dg_repeat1"].to_numpy()
+    r2 = df["dg_repeat2"].to_numpy()
+    r3 = df["dg_repeat3"].to_numpy()
+    err = df["sem_kcal_mol"].to_numpy()
+
+    return sampling_time, dG, r1, r2, r3, err
+
+def plot_convergence(system, stage, check_time, dg_tolerance):
+    """
+    Check that the forwards and reverse estimates lie within
+    dg_tolerance of each other at check_time
+    """
+    forward = _get_conv_trace(
+        system,
+        stage,
+        direction="forward"
+    )
+
+    reverse = _get_conv_trace(
+        system,
+        stage,
+        direction="reverse"
+    )
+
+    sampling_time = forward[0]
+
+    if stage == 'Boresch': # account for uniform 1 ns truncation
+        sampling_time = sampling_time + 1
+
+    fwd = {
+        1: forward[2],
+        2: forward[3],
+        3: forward[4],
+    }
+
+    rev = {
+        1: reverse[2],
+        2: reverse[3],
+        3: reverse[4],
+    }
+
+    cutoff_idx = np.where(
+        np.isclose(sampling_time, check_time)
+    )[0][0]
+
+    colours = {
+        1: "tab:blue",
+        2: "tab:orange",
+        3: "tab:green",
+    }
+
+    for repeat, colour in colours.items():
+        plt.plot(
+            sampling_time,
+            fwd[repeat],
+            marker="s",
+            color=colour,
+            label=f"repeat {repeat} forward",
+        )
+
+        plt.plot(
+            sampling_time,
+            rev[repeat],
+            linestyle=":",
+            marker="o",
+            color=colour,
+            label=f"repeat {repeat} reverse",
+        )
+
+        forward_cutoff = fwd[repeat][cutoff_idx]
+        forward_final = fwd[repeat][-1]
+
+        reverse_cutoff = rev[repeat][cutoff_idx]
+        reverse_final = rev[repeat][-1]
+
+        if np.isfinite(forward_cutoff) and np.isfinite(reverse_cutoff):
+            directional_difference = abs(
+                forward_cutoff - reverse_cutoff
+            )
+
+            if directional_difference > dg_tolerance:
+                print(
+                    f"{system}: repeat {repeat} forward/reverse "
+                    f"disagreement at {check_time:g} ns: "
+                    f"{directional_difference:.2f} kcal/mol"
+                )
+
+                plt.plot(
+                    sampling_time[-1]+1.5,
+                    fwd[repeat][-1],
+                    marker="*",
+                    markersize=16,
+                    color=colour,
+                    markeredgecolor="black",
+                    linestyle="None",
+                    zorder=10,
+                )
+
+    # y-axis limits
+    all_dg = np.concatenate([
+        fwd[1], fwd[2], fwd[3],
+        rev[1], rev[2], rev[3],
+    ])
+
+    all_dg = all_dg[np.isfinite(all_dg)]
+
+    if len(all_dg) == 0:
+        raise ValueError("No finite DG estimates available for plotting")
+
+    y_center = 0.5 * (np.min(all_dg) + np.max(all_dg))
+
+    plt.ylim(
+        y_center - 5.0,
+        y_center + 5.0,
+    )
+
+    plt.title(f"{system} {stage} forward/reverse convergence")
+    plt.xlabel("Window sampling time (ns)")
+    plt.ylabel("Free energy estimate (kcal/mol)")
+    plt.legend(fontsize='x-small')
+    plt.tight_layout()
+    plt.show()
